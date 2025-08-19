@@ -1,0 +1,25 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: NER API on AWS Lambda (spaCy en_core_web_sm)
+
+Globals:
+  Function:
+    Runtime: python3.10
+    MemorySize: 512
+    Timeout: 15
+    Architectures: [x86_64]
+
+Resources:
+  NerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: .
+      Handler: src/handler.lambda_handler
+      # Reuse the pre-created Learner Lab role (no new IAM creation)
+      Role: !Sub arn:aws:iam::${AWS::AccountId}:role/LabRole
+      Events:
+        NerApi:
+          Type: HttpApi
+          Properties:
+            Path: /ner
+            Method: POST
