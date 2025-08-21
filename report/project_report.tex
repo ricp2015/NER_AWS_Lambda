@@ -1,0 +1,178 @@
+\documentclass[11pt,a4paper]{article}
+
+% --- Basic packages and styling (non-IEEE template) ---
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1in]{geometry}
+\usepackage{microtype}
+\usepackage{setspace}
+\usepackage{titlesec}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{listings}
+\usepackage{caption}
+\usepackage{minted}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=black,
+  urlcolor=blue,
+  citecolor=black,
+  pdfauthor={<Your Name>},
+  pdftitle={Serverless Named Entity Recognition on AWS Lambda},
+  pdfsubject={Cloud Computing Project Report},
+  pdfkeywords={AWS Lambda, API Gateway, SAM, spaCy, NER, Serverless, CloudWatch, Locust}
+}
+
+\lstdefinestyle{code}{
+  basicstyle=\ttfamily\small,
+  keywordstyle=\bfseries\color{black},
+  commentstyle=\itshape\color{gray!70!black},
+  stringstyle=\color{teal!60!black},
+  showstringspaces=false,
+  frame=single,
+  framerule=0.3pt,
+  rulecolor=\color{black!20},
+  breaklines=true,
+  columns=fullflexible
+}
+\lstset{style=code}
+
+\title{\vspace{-1.5em}\Large\bfseries Serverless Named Entity Recognition on AWS Lambda}
+\author{Riccardo Pitzanti - 1947877 \quad \quad \quad \quad Federico Iannini - 1931748\\
+  \normalsize pitzanti.1947877@studenti.uniroma1.it \quad iannini.1931748@studenti.uniroma1.it\\[0.25em]
+  \normalsize Sapienza Università di Roma}
+\date{\normalsize \today}
+
+\begin{document}
+\maketitle
+\vspace{-1.5em}
+
+\section{Introduction}
+
+\section{Background}
+
+\subsection{Named Entity Recognition (NER) and spaCy}
+Named Entity Recognition (NER) is a natural language processing (NLP) task focused on identifying and categorizing information elements, known as entities, within unstructured text. These entities are typically classified into predefined categories such as persons (\textsf{PERSON}), organizations (\textsf{ORG}), and geopolitical entities (\textsf{GPE}). The spaCy library in Python provides a production-ready framework for implementing NLP pipelines, offering statistical models for tasks like NER.
+
+\subsection{AWS SAM \& Containerized Build with Docker}
+The AWS Serverless Application Model (SAM) is an open-source framework that extends AWS CloudFormation to provide a simplified syntax for defining serverless resources. It is a form of Infrastructure as Code (IaC) specifically designed to express the functions, APIs, permissions, and events that compose a serverless application. A containerized build process involves using a consistent, isolated environment to compile application dependencies and package the code. By employing Docker, SAM ensures that the build process is executed within a containerized environment that replicates the AWS Lambda runtime. This guarantees consistency between the development build and the deployment target, thereby mitigating compatibility issues.
+
+\subsection{AWS Lambda and HTTP API}
+AWS Lambda is a serverless, event-driven compute service that allows for the execution of code in response to triggers without requiring the management of underlying servers. It automatically scales with incoming request volume and utilizes a fine-grained cost model based on actual compute consumption. The Amazon API Gateway is a fully managed service that simplifies the creation, publication, and maintenance of secure APIs at any scale. It acts as a front-door for applications to access data and business logic from backend services, providing essential features like HTTP endpoint management, request routing, and authorization.
+
+\subsection{Observability with CloudWatch}
+Observability is a system property that describes how well internal states can be understood from external outputs, primarily through the collection and analysis of logs, metrics, and traces. Amazon CloudWatch is a monitoring and observability service that provides a unified view of AWS resource health, application performance, and operational trends. It automatically collects performance metrics from services like AWS Lambda.
+
+\subsection{Load Testing with Locust}
+Locust is an open-source load testing tool that allows developers to define user behavior with Python code and simulate various concurrent users to assess a system's performance under stress. Its distributed and scalable nature makes it suitable for testing the limits of web services and APIs. It provides a real-time web-based user interface to visualize performance indicators such as requests per second, response times, and the number of failing requests as the test is running.
+
+\section{System Design and Implementation}
+\subsection{Architecture overview}
+\begin{itemize}[leftmargin=1.3em]
+  \item \textbf{Client} sends \texttt{POST /ner} with a short text body.
+  \item \textbf{API Gateway (HTTP API)} forwards requests to Lambda.
+  \item \textbf{Lambda} parses input, runs spaCy NER (warm model), and returns spans.
+  \item \textbf{CloudWatch} records metrics and logs for observability.
+\end{itemize}
+
+\noindent\textbf{API contract.}
+\begin{minted}[
+    frame=single,
+    linenos
+  ]{json}
+POST /ner
+Content-Type: application/json
+{"text": "Alan Turing was born on June 23, 1912, in London, England."}
+
+200 OK
+{"entities": [
+    {'text': 'Alan Turing', 'label': 'PERSON', 'start': 0, 'end': 11},
+    {'text': 'June 23, 1912', 'label': 'DATE', 'start': 24, 'end': 37},
+    {'text': 'London', 'label': 'GPE', 'start': 41, 'end': 47},
+    {'text': 'England', 'label': 'GPE', 'start': 49, 'end': 56}]
+}
+\end{minted}
+%caption={Request and response schemas (illustrative).}
+
+
+\section{Methodology and Implementation}
+
+\subsection{Inference Core Module (\texttt{src/ner.py})}
+This module constitutes the computational core responsible for the Named Entity Recognition (NER) task. It utilizes the spaCy library, a framework for natural language processing (NLP) in Python. The pre-trained statistical model (\texttt{en\_core\_web\_sm}) is loaded into a global constant at module import time. The primary function, \texttt{extract\_entities(text: str)}, processes an input string through the spaCy pipeline. It returns a list of dictionaries, each containing the extracted entity's surface form (\texttt{text}), its ontological class (\texttt{label}), and the character-level indices (\texttt{start}, \texttt{end}) denoting its span within the original text.
+
+\subsection{Lambda Handler Function (\texttt{src/handler.py})}
+This module implements the AWS Lambda function handler, which serves as the entry point for requests proxied by Amazon API Gateway. Its primary role is to manage the HTTP request-response cycle. The handler first invokes a helper function, \texttt{\_parse\_body}, to normalize the incoming event structure. This function abstracts away the differences between the event payload delivered by API Gateway (where the HTTP request body is passed as a JSON-encoded string) and the event object used during local testing (which may be a Python dictionary). The handler then performs input validation, checking for the presence and type of the required \texttt{'text'} field. Invalid requests result in a \texttt{400 Bad Request} response. Validated text is passed to the inference core, and the resulting entities are serialized into a JSON object returned within a \texttt{200 OK} response, complete with appropriate HTTP headers for content type.
+
+\subsection{Build Process}
+The build is executed using the AWS SAM CLI command \texttt{sam build --use-container}. This process constructs the deployment package inside a Docker container that emulates the Amazon Linux environment of AWS Lambda.
+
+\subsection{Infrastructure Provisioning (SAM Template)}
+The cloud infrastructure is defined declaratively using the AWS Serverless Application Model (SAM), an extension of AWS CloudFormation. The template, \texttt{template.yaml}, specifies a minimal and functional stack:
+\begin{itemize}
+    \item A single AWS Lambda function resource with its runtime (\texttt{python3.9}), allocated memory (512 MB), and timeout (15 seconds) defined in the \texttt{Globals} section.
+    \item An Amazon API Gateway HTTP API resource, which provisions a managed HTTPS endpoint. This API is configured with a single route (\texttt{POST /ner}) that integrates directly with the Lambda function.
+    \item A pre-existing IAM role (\texttt{LabRole}) is referenced for execution permissions, a constraint of the AWS Academy Learner Lab environment. In a standard AWS account, SAM would typically generate a minimal role with necessary permissions automatically.
+\end{itemize}
+This Infrastructure-as-Code (IaC) approach guarantees that the entire application stack is versioned, reproducible, and deployable with a single command.
+
+\subsection{Front-End}
+
+\section{Performance Evaluation and Testing}\label{sec:testing}
+% Intentionally left empty as requested.
+% This section will host methodology (Locust user models, datasets, ramp-up),
+% metrics (p50/p95 Duration, Concurrency, Throttles), and CloudWatch exports.
+
+\section{Results}\label{sec:results}
+% Intentionally left empty as requested.
+% This section will report tables/plots for each profile, discuss cold starts
+% vs warm performance, and include a short cost estimate.
+
+\section{Limitations and Future Work}
+
+\section{Conclusion}\label{sec:conclusion}
+% Intentionally left empty as requested.
+
+\section*{Reproducibility \& Repository Notes}
+The repository is organized for ``clone $\rightarrow$ run'' on Windows:
+\begin{enumerate}[leftmargin=1.3em]
+  \item Install Python 3.10+, Docker Desktop, AWS CLI v2, AWS SAM CLI.
+  \item \texttt{python -m venv .venv; . .\textbackslash .venv\textbackslash Scripts\textbackslash Activate.ps1}
+  \item \texttt{pip install -r requirements.txt}
+  \item \texttt{sam build --use-container}
+  \item \texttt{sam deploy --guided --profile learnerlab}
+  \item Use \texttt{scripts/smoke.ps1} to POST \texttt{/ner}.
+  \item Tear down with \texttt{scripts/delete.ps1}.
+\end{enumerate}
+
+\section*{Ethical, Cost, and Budget Considerations}
+We designed for negligible standing cost and minimal environmental impact: no always-on compute, small artifacts, and conservative logs. Load tests remain moderate to avoid unintended denial-of-service behavior and unnecessary spend.
+
+\begin{thebibliography}{9}
+\bibitem{spacy}
+ExplosionAI. \emph{spaCy}. \url{https://spacy.io/}.
+
+\bibitem{NER}
+ExplosionAI. \emph{NER in spaCy}. \url{https://spacy.io/api/entityrecognizer}.
+
+\bibitem{sam}
+AWS. \emph{AWS Serverless Application Model (SAM)}. \url{https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/}.
+
+\bibitem{lambda}
+AWS. \emph{AWS Lambda Developer Guide}. \url{https://docs.aws.amazon.com/lambda/latest/dg/welcome.html}.
+
+\bibitem{apigw}
+AWS. \emph{Amazon API Gateway HTTP APIs}. \url{https://docs.aws.amazon.com/apigateway/latest/developerguide/http-api.html}.
+
+\bibitem{cloudwatch}
+AWS. \emph{Amazon CloudWatch Metrics for Lambda}. \url{https://docs.aws.amazon.com/lambda/latest/dg/monitoring-metrics.html}.
+
+\bibitem{locust}
+Locust. \emph{A modern load testing framework}. \url{https://locust.io/}.
+\end{thebibliography}
+
+\end{document}

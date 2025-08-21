@@ -5,3 +5,9 @@ __pycache__/
 .env
 samconfig.toml
 .DS_Store
+*.pkg
+*.log
+*.out
+*synctex.gz
+*.aux
+report/_minted-project_report/
