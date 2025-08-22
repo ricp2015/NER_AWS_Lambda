@@ -136,9 +136,9 @@ For ease of distribution and reproducibility, the static front-end is packaged w
 \section{Performance Evaluation and Testing}\label{sec:testing}
 
 \subsection{Goals and approach}
-The objective is to evaluate the responsiveness, scalability, and stability of the NER microservice deployed on AWS Lambda behind an HTTP API. Following the course guidance, each experiment uses a structured workload with \emph{Warm-up (WU)}, \emph{Ramp-up (RU)}, \emph{Steady (S)}, and \emph{Ramp-down (RD)} phases. We collect both \emph{user-oriented} (client) and \emph{system-oriented} (provider) metrics and align the CloudWatch time windows with the Locust test window (WU excluded).
+The objective is to evaluate the responsiveness, scalability, and stability of the NER microservice deployed on AWS Lambda behind an HTTP API. Each experiment uses a structured workload with \emph{Warm-up (WU)}, \emph{Ramp-up (RU)}, \emph{Steady (S)}, and \emph{Ramp-down (RD)} phases. We collect both \emph{user-oriented} (client) and \emph{system-oriented} (provider) metrics and align the CloudWatch time windows with the Locust test window (WU excluded).
 
-\subsection{System under test (SUT) and constraints}
+\subsection{System under test (SUT) and constraints !TODO}
 \begin{itemize}
   \item \textbf{Function:} AWS Lambda (Python\,3.10), NER inference (ONNXRuntime), Region \texttt{us-east-1}.
   \item \textbf{Memory:} Baseline \SI{512}{MB}; Heavy variants at \SI{1024}{MB}. We also re-ran Scenario~B Heavy at \SI{512}{MB} to assess vertical scaling (\SI{512}\,$\rightarrow$\,\SI{1024}{MB}).
@@ -147,7 +147,7 @@ The objective is to evaluate the responsiveness, scalability, and stability of t
   \item \textbf{Lab limits:} Learner Lab Lambda concurrency $\approx$ 10; budget is pay-per-request, so short, repeated runs are preferred.
 \end{itemize}
 
-\subsection{Common settings across all scenarios}
+\subsection{Common settings across all scenarios !TODO}
 \begin{itemize}
   \item \textbf{Warm-up (WU):} \SI{60}{s} at 2 users (spawn rate 2/s) to trigger cold starts. Immediately after WU the client statistics are reset so that RU/S/RD are isolated in the reported numbers.
   \item \textbf{Payload mix:} Short and long English sentences with named entities (persons, organizations, locations, dates). Requests are \texttt{POST /ner} with a small JSON body.
@@ -155,7 +155,7 @@ The objective is to evaluate the responsiveness, scalability, and stability of t
   \item \textbf{Timing windows:} For each run we record absolute UTC start/end times; CloudWatch queries use the same window (WU excluded) to export provider metrics.
 \end{itemize}
 
-\subsection{Workload scenarios}
+\subsection{Workload scenarios !TODO motivate}
 We use three canonical shapes; durations below refer to the \emph{main window} (after WU and stats reset). ``Users'' are active virtual users; RPS emerges from users, client think time, and function latency.
 
 \paragraph{Scenario A — Bursty}
@@ -164,7 +164,7 @@ We use three canonical shapes; durations below refer to the \emph{main window} (
   \item \textbf{Heavy A:} constant 10 users for $\approx$\SI{360}{s}; near-zero think time (0–0.1\,s) to drive high RPS until bounded by Lambda concurrency.
 \end{itemize}
 
-\paragraph{Scenario B — Ramp $\rightarrow$ Steady $\rightarrow$ Ramp-down}
+\paragraph{Scenario B — Ramp $\rightarrow$ Steady $\rightarrow$ Ramp-down !TODO CHANGE}
 \begin{itemize}
   \item \textbf{Light B:} RU in \SI{60}{s} steps through 1$\rightarrow$3$\rightarrow$5$\rightarrow$6$\rightarrow$7$\rightarrow$8 users, then S at 8 users for \SI{240}{s}, then RD 4 users (\SI{60}{s}) and 1 user (\SI{60}{s}). Think time short (0.2–1.0\,s).
   \item \textbf{Heavy B:} Faster RU to 10 users, S at 10 users for $\approx$\SI{240}{s}, then RD; near-zero think time (0–0.1\,s) for high RPS.
@@ -184,32 +184,20 @@ We use three canonical shapes; durations below refer to the \emph{main window} (
 \end{itemize}
 \textbf{Provider (system-oriented, CloudWatch / Lambda):}
 \begin{itemize}
-  \item \emph{Duration} (we use p95), \emph{Invocations}, \emph{ConcurrentExecutions}; additionally \emph{Errors}, \emph{Throttles}, and \emph{InitDuration} when present.
+  \item \emph{Duration} (we use p95), \emph{Invocations}, \emph{ConcurrentExecutions}.
   \item Metrics are exported at \SI{60}{s} resolution using the exact Locust main-window timestamps.
 \end{itemize}
 
-\subsection{Execution procedure}
-For each scenario/variant we followed this procedure:
-\begin{enumerate}
-  \item Start WU (\SI{60}{s}, 2 users), then automatically reset client statistics.
-  \item Run the configured shape (A/B/C) for the specified main-window duration.
-  \item Save Locust artifacts (HTML + CSVs) named by scenario/variant and note the main-window UTC timestamps.
-  \item Export matching Lambda metrics (Duration p95, Invocations, ConcurrentExecutions; plus Errors/Throttles/InitDuration) for the same timestamps.
-\end{enumerate}
-
-\subsection{Test variants covered in this study}
+\subsection{Test variants covered in this study !TODO table}
 \begin{itemize}
   \item \textbf{A, B, C (Light):} realistic pacing, lower RPS.
   \item \textbf{A, B, C (Heavy @ \SI{1024}{MB}):} near-zero think time to stress concurrency and throughput.
   \item \textbf{Vertical scaling (B Heavy, \SI{512}{MB} vs \SI{1024}{MB}):} identical shape and pacing, only the Lambda memory differs.
 \end{itemize}
 
-\subsection{Data availability for analysis}
-For every Light/Heavy A/B/C run we collected: (i) Locust CSVs and the corresponding HTML summary page, and (ii) Lambda CloudWatch metrics for Duration, Invocations, and ConcurrentExecutions (plus Errors/Throttles/InitDuration when present). These datasets will be used in the next subsection to compute percentiles, throughput, and to compare memory configurations.
+\section{Results and discussion !TODO enlarge images}
 
-\section{Results and discussion}
-
-In this section we report the outcomes of the experiments defined in the previous section. For each scenario (A, B, C) we present both the \emph{Light} (lower RPS) and \emph{Heavy} (higher RPS) variants. Heavy runs were executed with \SI{1024}{MB} for the Lambda memory; in addition, we re-ran the Heavy B shape at \SI{512}{MB} to assess vertical scaling. For every run we combine (i) user-oriented metrics from Locust (HTML \& CSV) and (ii) system-oriented metrics from CloudWatch (Lambda), aligned to the main window (\emph{RU}~$\rightarrow$~\emph{S}~$\rightarrow$~\emph{RD}) with the warm-up (WU) excluded.
+In this section we report the outcomes of the experiments defined in the previous section. For each scenario (A, B, C) we present both the \emph{Light} (lower RPS) and \emph{Heavy} (higher RPS) variants.
 
 \subsection{Scenario A (Bursty)}\label{subsec:resA}
 
@@ -228,7 +216,7 @@ With long think times (5--10\,s) and a constant small user pool, the overall thr
 \end{figure}
 
 \paragraph{Heavy A (high-RPS bursty).}
-Switching to near-zero client think time with 10 users converts A into a sustained high-throughput plateau. In Locust, the RPS rises sharply after WU, and the latency percentiles stabilize during the steady phase. On the provider side, \emph{ConcurrentExecutions} plateaus near the Learner Lab ceiling (about 9--10), which is expected; with p95 latencies in the sub-second range, this concurrency bound determines the sustainable RPS. \emph{Invocations} grow linearly over time during the steady phase, and \emph{Duration} maintains a tight band once the runtime is warm.
+Switching to near-zero client think time with 10 users converts A into a sustained high-throughput plateau. In Locust, the RPS rises sharply after WU. On the provider side, \emph{ConcurrentExecutions} plateaus near the Learner Lab ceiling (about 9--10), which is expected. \emph{Invocations} grow linearly over time during the steady phase, and \emph{Duration} maintains a tight band once the runtime is warm.
 
 \begin{figure}[h!] \centering
   \includegraphics[width=\linewidth]{"figures/hA - Charts.png"}
@@ -246,12 +234,6 @@ Switching to near-zero client think time with 10 users converts A into a sustain
   \includegraphics[width=.32\linewidth]{"figures/hA - Durations.png"}
   \caption{Heavy A --- Lambda Invocations (left), ConcurrentExecutions (middle), Duration (right).}
 \end{figure}
-
-\paragraph{Key takeaways for A.}
-\begin{itemize}
-  \item \textbf{Light vs Heavy:} Light A keeps RPS intentionally low; Heavy A pushes to the concurrency ceiling, revealing the steady-state latency/throughput envelope.
-  \item \textbf{Provider view:} In Heavy A, \emph{ConcurrentExecutions} reaches a stable plateau near the cap; \emph{Duration} remains stable after initial warm-up. No obvious signs of instability (e.g., oscillations or extended latency tails) are visible in the charts.
-\end{itemize}
 
 \subsection{Scenario B (Ramp $\rightarrow$ Steady $\rightarrow$ Ramp-down)}\label{subsec:resB}
 

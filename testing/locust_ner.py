@@ -29,7 +29,6 @@ IN_WARMUP = True
 
 # ------------ Payloads ------------
 SAMPLES = [
-    "Ciao, come stai oggi a Roma?",
     "Tim Cook met Elon Musk in Rome on Monday.",
     "Barack Obama visited Berlin in 2013.",
     "Amazon acquired Whole Foods for $13.7 billion in 2017.",
