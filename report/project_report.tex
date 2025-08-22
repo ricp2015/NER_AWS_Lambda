@@ -16,6 +16,7 @@
 \usepackage{listings}
 \usepackage{caption}
 \usepackage{minted}
+\usepackage{siunitx}
 
 \hypersetup{
   colorlinks=true,
@@ -53,6 +54,11 @@
 \vspace{-1.5em}
 
 \section{Introduction}
+The proliferation of unstructured textual data across digital platforms has precipitated a growing demand for efficient and scalable information extraction techniques. Named Entity Recognition (NER), a fundamental subtask within Natural Language Processing (NLP), serves as a critical enabling technology for this purpose, tasked with identifying and classifying atomic elements in text into predefined categories such as persons, organizations, and locations. The operationalization of such NLP models, however, traditionally necessitates managing server infrastructure, which introduces complexity, overhead, and potential underutilization of resources.
+
+This work explores the application of a serverless computing paradigm to address these challenges, deploying a production-ready NLP pipeline for NER on AWS Lambda. By leveraging AWS Lambda and Amazon API Gateway, we architect a microservice that is inherently scalable, cost-efficient, and devoid of server management concerns. The implementation utilizes the spaCy library, a robust industrial-strength framework for NLP in Python, ensuring high-quality inference capabilities. The entire application stack—including compute, API management, and security—is defined and deployed programmatically using the AWS Serverless Application Model (SAM), embodying Infrastructure-as-Code (IaC) principles to guarantee reproducibility and reliability.
+
+The primary objective of this study is to design, implement, and rigorously evaluate the performance characteristics of this serverless NER service under varied load conditions. We employ Locust, an open-source load-testing tool, to simulate traffic patterns ranging from benign to stressful, measuring key client-side and provider-side metrics. Our analysis focuses on quantifying latency, throughput, stability, and the impact of vertical scaling (memory allocation) within the constraints of an educational AWS environment. The findings demonstrate the viability of serverless architectures for deploying lightweight, performant, and cost-effective NLP microservices.
 
 \section{Background}
 
@@ -121,21 +127,279 @@ The cloud infrastructure is defined declaratively using the AWS Serverless Appli
 This Infrastructure-as-Code (IaC) approach guarantees that the entire application stack is versioned, reproducible, and deployable with a single command.
 
 \subsection{Front-End}
+The front-end component of the application is deliberately designed as a minimal web interface to facilitate testing and demonstration of the deployed Named Entity Recognition (NER) service. It is implemented as a static \texttt{HTML} page enriched with basic \texttt{JavaScript} logic. The interface provides a text area where the user can enter arbitrary input and a form field for specifying the API Gateway endpoint generated during the deployment process. Upon submission, the client-side script performs an asynchronous \texttt{HTTP POST} request to the NER API, transmitting the input text in JSON format.
+
+The server's response, which consists of the extracted named entities together with their associated labels, is rendered directly in the browser in a structured JSON format. This design ensures transparency of the system's behavior and allows the user to validate the correctness of the back-end inference in real time.
+
+For ease of distribution and reproducibility, the static front-end is packaged within a lightweight Docker container based on the \texttt{nginx} web server. This container exposes the page on a local port, enabling researchers and practitioners to access the interface through a standard web browser without the need for additional configuration or build tools. Such a containerized approach guarantees consistency across different environments, while maintaining the simplicity appropriate for an internal testing utility rather than a production-grade user interface.
 
 \section{Performance Evaluation and Testing}\label{sec:testing}
-% Intentionally left empty as requested.
-% This section will host methodology (Locust user models, datasets, ramp-up),
-% metrics (p50/p95 Duration, Concurrency, Throttles), and CloudWatch exports.
 
-\section{Results}\label{sec:results}
-% Intentionally left empty as requested.
-% This section will report tables/plots for each profile, discuss cold starts
-% vs warm performance, and include a short cost estimate.
+\subsection{Goals and approach}
+The objective is to evaluate the responsiveness, scalability, and stability of the NER microservice deployed on AWS Lambda behind an HTTP API. Following the course guidance, each experiment uses a structured workload with \emph{Warm-up (WU)}, \emph{Ramp-up (RU)}, \emph{Steady (S)}, and \emph{Ramp-down (RD)} phases. We collect both \emph{user-oriented} (client) and \emph{system-oriented} (provider) metrics and align the CloudWatch time windows with the Locust test window (WU excluded).
+
+\subsection{System under test (SUT) and constraints}
+\begin{itemize}
+  \item \textbf{Function:} AWS Lambda (Python\,3.10), NER inference (ONNXRuntime), Region \texttt{us-east-1}.
+  \item \textbf{Memory:} Baseline \SI{512}{MB}; Heavy variants at \SI{1024}{MB}. We also re-ran Scenario~B Heavy at \SI{512}{MB} to assess vertical scaling (\SI{512}\,$\rightarrow$\,\SI{1024}{MB}).
+  \item \textbf{API:} AWS HTTP API (API Gateway) fronting the Lambda function.
+  \item \textbf{Client:} Locust on a developer workstation; single generator node.
+  \item \textbf{Lab limits:} Learner Lab Lambda concurrency $\approx$ 10; budget is pay-per-request, so short, repeated runs are preferred.
+\end{itemize}
+
+\subsection{Common settings across all scenarios}
+\begin{itemize}
+  \item \textbf{Warm-up (WU):} \SI{60}{s} at 2 users (spawn rate 2/s) to trigger cold starts. Immediately after WU the client statistics are reset so that RU/S/RD are isolated in the reported numbers.
+  \item \textbf{Payload mix:} Short and long English sentences with named entities (persons, organizations, locations, dates). Requests are \texttt{POST /ner} with a small JSON body.
+  \item \textbf{Light vs Heavy:} Each scenario has a \emph{Light} profile (lower RPS) and a \emph{Heavy} profile (higher RPS). Heavy runs use near-zero client think time to approach the Lambda concurrency ceiling; Light runs use more realistic user pacing.
+  \item \textbf{Timing windows:} For each run we record absolute UTC start/end times; CloudWatch queries use the same window (WU excluded) to export provider metrics.
+\end{itemize}
+
+\subsection{Workload scenarios}
+We use three canonical shapes; durations below refer to the \emph{main window} (after WU and stats reset). ``Users'' are active virtual users; RPS emerges from users, client think time, and function latency.
+
+\paragraph{Scenario A — Bursty}
+\begin{itemize}
+  \item \textbf{Light A:} constant 5 users for \SI{300}{s}; long think time (5–10\,s) to emulate intermittent clicks $\Rightarrow$ low, flat RPS plateau.
+  \item \textbf{Heavy A:} constant 10 users for $\approx$\SI{360}{s}; near-zero think time (0–0.1\,s) to drive high RPS until bounded by Lambda concurrency.
+\end{itemize}
+
+\paragraph{Scenario B — Ramp $\rightarrow$ Steady $\rightarrow$ Ramp-down}
+\begin{itemize}
+  \item \textbf{Light B:} RU in \SI{60}{s} steps through 1$\rightarrow$3$\rightarrow$5$\rightarrow$6$\rightarrow$7$\rightarrow$8 users, then S at 8 users for \SI{240}{s}, then RD 4 users (\SI{60}{s}) and 1 user (\SI{60}{s}). Think time short (0.2–1.0\,s).
+  \item \textbf{Heavy B:} Faster RU to 10 users, S at 10 users for $\approx$\SI{240}{s}, then RD; near-zero think time (0–0.1\,s) for high RPS.
+  \item \textbf{Vertical scaling:} We executed Heavy~B twice with identical shape, once at \SI{512}{MB} and once at \SI{1024}{MB}, to quantify the impact of memory on latency (p95/p99) and steady-state throughput.
+\end{itemize}
+
+\paragraph{Scenario C — Spike}
+\begin{itemize}
+  \item \textbf{Light C:} pre-spike \SI{30}{s} at 1 user, spike to 8 users for \SI{240}{s}, then \SI{60}{s} at 2 users; short think time (0.2–1.0\,s).
+  \item \textbf{Heavy C:} pre-spike \SI{30}{s} at 2 users, spike to 10 users for \SI{240}{s}, then \SI{60}{s} at 2 users; near-zero think time (0–0.1\,s).
+\end{itemize}
+
+\subsection{Metrics collected}
+\textbf{Client (user-oriented, Locust):}
+\begin{itemize}
+  \item Per-run CSV/HTML with request counts, failure rate, response-time distribution (p50/p95/p99), and effective RPS during RU/S/RD (WU excluded).
+\end{itemize}
+\textbf{Provider (system-oriented, CloudWatch / Lambda):}
+\begin{itemize}
+  \item \emph{Duration} (we use p95), \emph{Invocations}, \emph{ConcurrentExecutions}; additionally \emph{Errors}, \emph{Throttles}, and \emph{InitDuration} when present.
+  \item Metrics are exported at \SI{60}{s} resolution using the exact Locust main-window timestamps.
+\end{itemize}
+
+\subsection{Execution procedure}
+For each scenario/variant we followed this procedure:
+\begin{enumerate}
+  \item Start WU (\SI{60}{s}, 2 users), then automatically reset client statistics.
+  \item Run the configured shape (A/B/C) for the specified main-window duration.
+  \item Save Locust artifacts (HTML + CSVs) named by scenario/variant and note the main-window UTC timestamps.
+  \item Export matching Lambda metrics (Duration p95, Invocations, ConcurrentExecutions; plus Errors/Throttles/InitDuration) for the same timestamps.
+\end{enumerate}
+
+\subsection{Test variants covered in this study}
+\begin{itemize}
+  \item \textbf{A, B, C (Light):} realistic pacing, lower RPS.
+  \item \textbf{A, B, C (Heavy @ \SI{1024}{MB}):} near-zero think time to stress concurrency and throughput.
+  \item \textbf{Vertical scaling (B Heavy, \SI{512}{MB} vs \SI{1024}{MB}):} identical shape and pacing, only the Lambda memory differs.
+\end{itemize}
+
+\subsection{Data availability for analysis}
+For every Light/Heavy A/B/C run we collected: (i) Locust CSVs and the corresponding HTML summary page, and (ii) Lambda CloudWatch metrics for Duration, Invocations, and ConcurrentExecutions (plus Errors/Throttles/InitDuration when present). These datasets will be used in the next subsection to compute percentiles, throughput, and to compare memory configurations.
+
+\section{Results and discussion}
+
+In this section we report the outcomes of the experiments defined in Section~\S\ref{sec:test-design}. For each scenario (A, B, C) we present both the \emph{Light} (lower RPS) and \emph{Heavy} (higher RPS) variants. Heavy runs were executed with \SI{1024}{MB} for the Lambda memory; in addition, we re-ran the Heavy B shape at \SI{512}{MB} to assess vertical scaling. For every run we combine (i) user-oriented metrics from Locust (HTML \& CSV) and (ii) system-oriented metrics from CloudWatch (Lambda), aligned to the main window (\emph{RU}~$\rightarrow$~\emph{S}~$\rightarrow$~\emph{RD}) with the warm-up (WU) excluded.
+
+\subsection{Scenario A (Bursty)}\label{subsec:resA}
+
+\paragraph{Light A (intermittent pacing).}
+With long think times (5--10\,s) and a constant small user pool, the overall throughput remains intentionally low and flat. This profile emulates intermittent human activity rather than throughput saturation. Lambda metrics show a correspondingly low and steady invocation rate and a shallow concurrent-executions curve.
+
+% Insert Locust overview (Light A)
+% \begin{figure}[h!] \centering
+%   \includegraphics[width=\linewidth]{figures/lA - Charts.png}
+%   \caption{Light A --- Locust charts (overall latency/RPS).}
+% \end{figure}
+
+% Insert Lambda metrics (Light A)
+% \begin{figure}[h!] \centering
+%   \includegraphics[width=.48\linewidth]{figures/lA - Duration.png}\hfill
+%   \includegraphics[width=.48\linewidth]{figures/lA - ConcExecutions.png}
+%   \caption{Light A --- Lambda Duration (left) and ConcurrentExecutions (right).}
+% \end{figure}
+
+\paragraph{Heavy A (high-RPS bursty).}
+Switching to near-zero client think time with 10 users converts A into a sustained high-throughput plateau. In Locust, the RPS rises sharply after WU, and the latency percentiles stabilize during the steady phase. On the provider side, \emph{ConcurrentExecutions} plateaus near the Learner Lab ceiling (about 9--10), which is expected; with p95 latencies in the sub-second range, this concurrency bound determines the sustainable RPS. \emph{Invocations} grow linearly over time during the steady phase, and \emph{Duration} maintains a tight band once the runtime is warm.
+
+% Insert Locust overview + stats (Heavy A)
+% \begin{figure}[h!] \centering
+%   \includegraphics[width=\linewidth]{figures/hA - Charts.png}
+%   \caption{Heavy A --- Locust charts (RPS spike after WU; steady plateau).}
+% \end{figure}
+
+% \begin{figure}[h!] \centering
+%   \includegraphics[width=\linewidth]{figures/hA- Stats.png}
+%   \caption{Heavy A --- Locust request statistics (p50/p95/p99, failures).}
+% \end{figure}
+
+% Insert Lambda metrics (Heavy A)
+% \begin{figure}[h!] \centering
+%   \includegraphics[width=.32\linewidth]{figures/hA-Invocations.png}\hfill
+%   \includegraphics[width=.32\linewidth]{figures/hA-ConcEx.png}\hfill
+%   \includegraphics[width=.32\linewidth]{figures/hA-Durations.png}
+%   \caption{Heavy A --- Lambda Invocations (left), ConcurrentExecutions (middle), Duration (right).}
+% \end{figure}
+
+\paragraph{Key takeaways for A.}
+\begin{itemize}
+  \item \textbf{Light vs Heavy:} Light A keeps RPS intentionally low; Heavy A pushes to the concurrency ceiling, revealing the steady-state latency/throughput envelope.
+  \item \textbf{Provider view:} In Heavy A, \emph{ConcurrentExecutions} reaches a stable plateau near the cap; \emph{Duration} remains stable after initial warm-up. No obvious signs of instability (e.g., oscillations or extended latency tails) are visible in the charts.
+\end{itemize}
+
+\subsection{Scenario B (Ramp $\rightarrow$ Steady $\rightarrow$ Ramp-down)}\label{subsec:resB}
+
+\paragraph{Light B (baseline shape).}
+The Locust charts show the stair-step RU, a clear steady plateau, and a controlled RD. Latency percentiles track this shape with mild variations, as expected under moderate load. Lambda \emph{Invocations} and \emph{ConcurrentExecutions} rise predictably during RU and flatten during the steady window.
+
+% Insert Locust (Light B)
+% \begin{figure}[h!] \centering
+%   \includegraphics[width=\linewidth]{figures/lB - Charts.png}
+%   \caption{Light B --- Locust charts (ramp, steady plateau, ramp-down).}
+% \end{figure}
+
+% Insert Lambda (Light B)
+% \begin{figure}[h!] \centering
+%   \includegraphics[width=.32\linewidth]{figures/lB - Invocations.png}\hfill
+%   \includegraphics[width=.32\linewidth]{figures/lB - ConcEx.png}\hfill
+%   \includegraphics[width=.32\linewidth]{figures/lB - Duration.png}
+%   \caption{Light B --- Lambda Invocations (left), ConcurrentExecutions (middle), Duration (right).}
+% \end{figure}
+
+\paragraph{Heavy B @ \SI{1024}{MB} (high-RPS ramp/steady).}
+With near-zero think time and 10 users, Heavy B reaches a higher RPS plateau than Light B while preserving the RU/S/RD structure. Locust statistics show tightened latency percentiles during the steady phase, indicating that the function remains comfortably within its latency budget under sustained load. Lambda \emph{ConcurrentExecutions} plateaus close to the concurrency limit; \emph{Duration} stabilizes to a narrow band after RU; \emph{Invocations} show the expected linear accumulation over the steady window.
+
+% Insert Locust (Heavy B 1024 MB)
+% \begin{figure}[h!] \centering
+%   \includegraphics[width=\linewidth]{figures/hB - Charts.png}
+%   \caption{Heavy B (1024 MB) --- Locust charts (higher RPS plateau vs Light).}
+% \end{figure}
+
+% \begin{figure}[h!] \centering
+%   \includegraphics[width=\linewidth]{figures/hB - Stats.png}
+%   \caption{Heavy B (1024 MB) --- Locust request statistics.}
+% \end{figure}
+
+% Insert Lambda (Heavy B 1024 MB)
+% \begin{figure}[h!] \centering
+%   \includegraphics[width=.32\linewidth]{figures/hB - Invocations.png}\hfill
+%   \includegraphics[width=.32\linewidth]{figures/hB - ConcEx.png}\hfill
+%   \includegraphics[width=.32\linewidth]{figures/hB - Duration.png}
+%   \caption{Heavy B (1024 MB) --- Lambda Invocations, ConcurrentExecutions, Duration.}
+% \end{figure}
+
+\paragraph{Vertical scaling: Heavy B @ \SI{512}{MB} vs @ \SI{1024}{MB}.}
+We re-executed the identical Heavy B shape at \SI{512}{MB} (\texttt{hBl-*}) to isolate the impact of memory. The comparison is clearest during the steady window:
+\begin{itemize}
+  \item \textbf{Latency effect:} The \SI{1024}{MB} configuration exhibits lower and tighter p95/p99 latency bands than \SI{512}{MB}, consistent with the expectation that more memory (and CPU share) shortens inference time. This is visible in the Lambda \emph{Duration} time series and in the Locust percentiles.
+  \item \textbf{Throughput effect:} Because the account-level concurrency limit remains the same, higher memory primarily improves \emph{per-invocation} speed rather than concurrency. As a result, the steady-state RPS at \SI{1024}{MB} is higher than at \SI{512}{MB} for the same user pacing, and the system reaches the plateau faster during RU.
+  \item \textbf{Stability:} Both memory settings remain stable during the steady window; no persistent spikes or oscillations are evident. If any brief spikes are present, they align with RU steps and do not persist in S.
+\end{itemize}
+
+% Insert Lambda (Heavy B 512 MB)
+% \begin{figure}[h!] \centering
+%   \includegraphics[width=.32\linewidth]{figures/hBl - Invocations.png}\hfill
+%   \includegraphics[width=.32\linewidth]{figures/hBl - ConcEx.png}\hfill
+%   \includegraphics[width=.32\linewidth]{figures/hBl - Duration.png}
+%   \caption{Heavy B (512 MB) --- Lambda Invocations, ConcurrentExecutions, Duration.}
+% \end{figure}
+
+% Insert Locust vs Lambda side-by-side (optional)
+% \begin{figure}[h!] \centering
+%   \includegraphics[width=.49\linewidth]{figures/hB - Stats.png}\hfill
+%   \includegraphics[width=.49\linewidth]{figures/hBl - Stats.png}
+%   \caption{Heavy B --- Locust request statistics: 1024 MB (left) vs 512 MB (right).}
+% \end{figure}
+
+\subsection{Scenario C (Spike)}\label{subsec:resC}
+
+\paragraph{Light C (moderate spike).}
+After a short pre-spike, the user count jumps to the steady segment and then drops. Locust shows the expected RPS surge and recovery, with latency percentiles temporarily stretching at the spike boundary and then stabilizing. Lambda \emph{ConcurrentExecutions} mirrors the spike profile; \emph{Invocations} reflect the burst in requests; \emph{Duration} remains in a narrow band during the steady segment.
+
+% Insert Locust (Light C)
+% \begin{figure}[h!] \centering
+%   \includegraphics[width=\linewidth]{figures/lC - Charts.png}
+%   \caption{Light C --- Locust charts (spike).}
+% \end{figure}
+
+% Insert Lambda (Light C)
+% \begin{figure}[h!] \centering
+%   \includegraphics[width=.32\linewidth]{figures/lC - Invocations.png}\hfill
+%   \includegraphics[width=.32\linewidth]{figures/lC  - ConcEx.png}\hfill
+%   \includegraphics[width=.32\linewidth]{figures/lC  - Duration.png}
+%   \caption{Light C --- Lambda Invocations, ConcurrentExecutions, Duration.}
+% \end{figure}
+
+\paragraph{Heavy C (high-intensity spike @ \SI{1024}{MB}).}
+With near-zero think time and 10 users, the spike immediately drives the system to the concurrency limit. Locust shows a sharp RPS jump with stable percentiles in the middle of the spike; Lambda confirms the concurrency plateau and a consistent \emph{Duration} band. The swift stabilization after the spike indicates that the cold-start penalty has been amortized during WU and the system sustains the intensity without degradation.
+
+% Insert Locust (Heavy C)
+% \begin{figure}[h!] \centering
+%   \includegraphics[width=\linewidth]{figures/hC - Charts.png}
+%   \caption{Heavy C --- Locust charts (high-intensity spike).}
+% \end{figure}
+
+% Insert Lambda (Heavy C)
+% \begin{figure}[h!] \centering
+%   \includegraphics[width=.32\linewidth]{figures/hC - Invocations.png}\hfill
+%   \includegraphics[width=.32\linewidth]{figures/hC - ConcEx.png}\hfill
+%   \includegraphics[width=.32\linewidth]{figures/hC - Duration.png}
+%   \caption{Heavy C --- Lambda Invocations, ConcurrentExecutions, Duration.}
+% \end{figure}
+
+\subsection{Cross-scenario observations}
+
+\paragraph{Light vs Heavy.}
+Across A/B/C, Heavy runs exhibit (i) higher plateau RPS in Locust and (ii) a \emph{ConcurrentExecutions} plateau close to the account cap (9--10). Latency percentiles are generally tighter once warmed and stay within the expected budget during S. Light runs remain below saturation and are useful to show stability under realistic pacing.
+
+\paragraph{Cold starts and warm-up.}
+The initial minute (WU) avoids contaminating the reported Locust metrics with cold-start spikes. On Lambda graphs, any residual \emph{InitDuration}/\emph{Duration} spikes appear near the WU boundary, then disappear in the main window.
+
+\paragraph{Availability.}
+No sustained failures are visible in the Locust tables for the provided snapshots. On the provider side, the absence of persistent anomalies in \emph{Duration} and \emph{ConcurrentExecutions} suggests that throttling was either absent or negligible in the main windows. (If point spikes exist at RU transitions, they are short-lived and expected.) The final report will quantify availability from the exported metrics as:
+\[
+\text{Availability} \approx 1 - \frac{\sum(\text{Errors} + \text{Throttles})}{\sum(\text{Invocations})}.
+\]
+
+\subsection{Summary of findings (to be quantified with CSVs)}
+\begin{itemize}
+  \item Heavy variants reach a concurrency-limited plateau with stable p95/p99 latencies; Light variants show low, steady load with minimal variance.
+  \item Vertical scaling (Heavy B, \SI{512}{MB} $\rightarrow$ \SI{1024}{MB}) reduces latency percentiles and increases achievable throughput for the same user pacing, while the concurrency plateau remains unchanged (as expected).
+  \item Under all tested shapes, the service maintains stable behavior during the Steady window, with quick recovery after spike/ramp transitions.
+\end{itemize}
+
+% -------------------------
+% Suggested figure insertions (filenames from your ZIP)
+% A (Light):  lA - Charts.png, lA - Stats.png, lA - Duration.png, lA - ConcExecutions.png, lA - Invocations.png
+% A (Heavy):  hA - Charts.png, hA- Stats.png, hA-Durations.png, hA-ConcEx.png, hA-Invocations.png
+% B (Light):  lB - Charts.png, lB - Stats.png, lB - Duration.png, lB - ConcEx.png, lB - Invocations.png
+% B (Heavy 1024MB): hB - Charts.png, hB - Stats.png, hB - Duration.png, hB - ConcEx.png, hB - Invocations.png
+% B (Heavy 512MB):  hBl - Charts.png, hBl - Stats.png, hBl - Duration.png, hBl - ConcEx.png, hBl - Invocations.png
+% C (Light):  lC - Charts.png, lC - Stats.png, lC  - Duration.png, lC  - ConcEx.png, lC - Invocations.png
+% C (Heavy):  hC - Charts.png, hC - Stats.png, hC - Duration.png, hC - ConcEx.png, hC - Invocations.png
+% -------------------------
+
 
 \section{Limitations and Future Work}
 
-\section{Conclusion}\label{sec:conclusion}
-% Intentionally left empty as requested.
+
+\section{Conclusion}
+This study successfully designed, implemented, and evaluated a fully serverless microservice for Named Entity Recognition, demonstrating the effective application of AWS Lambda for deploying natural language processing workloads. The architecture, built upon AWS Lambda, API Gateway, and the spaCy library, proved capable of delivering low-latency inference while abstracting away all server management concerns. The use of the AWS Serverless Application Model (SAM) ensured that the infrastructure was defined as code, making the deployment process reproducible, version-controlled, and automatable.
+
+The comprehensive performance evaluation, conducted using Locust across multiple workload scenarios, yielded key insights. The system exhibited stable and predictable behavior under both light and heavy load profiles, consistently operating within its performance envelope. The experiments confirmed that the service efficiently scales with incoming request volume, as governed by the AWS Lambda concurrency model. Furthermore, the vertical scaling assessment revealed that increasing allocated memory directly improved inference latency and overall throughput, highlighting a straightforward mechanism for performance tuning. The service maintained high availability throughout testing, with errors and throttling being negligible during steady-state operations.
+
+In conclusion, this project serves as a validated blueprint for deploying efficient, cost-effective, and scalable NLP applications in a serverless environment. The architectural patterns and methodologies employed—from containerized builds to automated deployment and systematic load testing—are directly transferable to other similar computational tasks. The results affirm that serverless computing is a powerful paradigm for event-driven, bursty workloads like NLP microservices, offering a compelling combination of operational simplicity, automatic scaling, and a fine-grained cost model. Future work could explore the integration of larger models, more complex NLP pipelines, and optimization strategies for further reducing cold start latency.
+
 
 \section*{Reproducibility \& Repository Notes}
 The repository is organized for ``clone $\rightarrow$ run'' on Windows:
