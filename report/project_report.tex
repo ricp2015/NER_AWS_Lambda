@@ -216,40 +216,8 @@ In this section we report the outcomes of the experiments defined in Section~\S\
 \paragraph{Light A (intermittent pacing).}
 With long think times (5--10\,s) and a constant small user pool, the overall throughput remains intentionally low and flat. This profile emulates intermittent human activity rather than throughput saturation. Lambda metrics show a correspondingly low and steady invocation rate and a shallow concurrent-executions curve.
 
-% Insert Locust overview (Light A)
-% \begin{figure}[h!] \centering
-%   \includegraphics[width=\linewidth]{figures/lA - Charts.png}
-%   \caption{Light A --- Locust charts (overall latency/RPS).}
-% \end{figure}
-
-% Insert Lambda metrics (Light A)
-% \begin{figure}[h!] \centering
-%   \includegraphics[width=.48\linewidth]{figures/lA - Duration.png}\hfill
-%   \includegraphics[width=.48\linewidth]{figures/lA - ConcExecutions.png}
-%   \caption{Light A --- Lambda Duration (left) and ConcurrentExecutions (right).}
-% \end{figure}
-
 \paragraph{Heavy A (high-RPS bursty).}
 Switching to near-zero client think time with 10 users converts A into a sustained high-throughput plateau. In Locust, the RPS rises sharply after WU, and the latency percentiles stabilize during the steady phase. On the provider side, \emph{ConcurrentExecutions} plateaus near the Learner Lab ceiling (about 9--10), which is expected; with p95 latencies in the sub-second range, this concurrency bound determines the sustainable RPS. \emph{Invocations} grow linearly over time during the steady phase, and \emph{Duration} maintains a tight band once the runtime is warm.
-
-% Insert Locust overview + stats (Heavy A)
-% \begin{figure}[h!] \centering
-%   \includegraphics[width=\linewidth]{figures/hA - Charts.png}
-%   \caption{Heavy A --- Locust charts (RPS spike after WU; steady plateau).}
-% \end{figure}
-
-% \begin{figure}[h!] \centering
-%   \includegraphics[width=\linewidth]{figures/hA- Stats.png}
-%   \caption{Heavy A --- Locust request statistics (p50/p95/p99, failures).}
-% \end{figure}
-
-% Insert Lambda metrics (Heavy A)
-% \begin{figure}[h!] \centering
-%   \includegraphics[width=.32\linewidth]{figures/hA-Invocations.png}\hfill
-%   \includegraphics[width=.32\linewidth]{figures/hA-ConcEx.png}\hfill
-%   \includegraphics[width=.32\linewidth]{figures/hA-Durations.png}
-%   \caption{Heavy A --- Lambda Invocations (left), ConcurrentExecutions (middle), Duration (right).}
-% \end{figure}
 
 \paragraph{Key takeaways for A.}
 \begin{itemize}
@@ -262,41 +230,8 @@ Switching to near-zero client think time with 10 users converts A into a sustain
 \paragraph{Light B (baseline shape).}
 The Locust charts show the stair-step RU, a clear steady plateau, and a controlled RD. Latency percentiles track this shape with mild variations, as expected under moderate load. Lambda \emph{Invocations} and \emph{ConcurrentExecutions} rise predictably during RU and flatten during the steady window.
 
-% Insert Locust (Light B)
-% \begin{figure}[h!] \centering
-%   \includegraphics[width=\linewidth]{figures/lB - Charts.png}
-%   \caption{Light B --- Locust charts (ramp, steady plateau, ramp-down).}
-% \end{figure}
-
-% Insert Lambda (Light B)
-% \begin{figure}[h!] \centering
-%   \includegraphics[width=.32\linewidth]{figures/lB - Invocations.png}\hfill
-%   \includegraphics[width=.32\linewidth]{figures/lB - ConcEx.png}\hfill
-%   \includegraphics[width=.32\linewidth]{figures/lB - Duration.png}
-%   \caption{Light B --- Lambda Invocations (left), ConcurrentExecutions (middle), Duration (right).}
-% \end{figure}
-
 \paragraph{Heavy B @ \SI{1024}{MB} (high-RPS ramp/steady).}
 With near-zero think time and 10 users, Heavy B reaches a higher RPS plateau than Light B while preserving the RU/S/RD structure. Locust statistics show tightened latency percentiles during the steady phase, indicating that the function remains comfortably within its latency budget under sustained load. Lambda \emph{ConcurrentExecutions} plateaus close to the concurrency limit; \emph{Duration} stabilizes to a narrow band after RU; \emph{Invocations} show the expected linear accumulation over the steady window.
-
-% Insert Locust (Heavy B 1024 MB)
-% \begin{figure}[h!] \centering
-%   \includegraphics[width=\linewidth]{figures/hB - Charts.png}
-%   \caption{Heavy B (1024 MB) --- Locust charts (higher RPS plateau vs Light).}
-% \end{figure}
-
-% \begin{figure}[h!] \centering
-%   \includegraphics[width=\linewidth]{figures/hB - Stats.png}
-%   \caption{Heavy B (1024 MB) --- Locust request statistics.}
-% \end{figure}
-
-% Insert Lambda (Heavy B 1024 MB)
-% \begin{figure}[h!] \centering
-%   \includegraphics[width=.32\linewidth]{figures/hB - Invocations.png}\hfill
-%   \includegraphics[width=.32\linewidth]{figures/hB - ConcEx.png}\hfill
-%   \includegraphics[width=.32\linewidth]{figures/hB - Duration.png}
-%   \caption{Heavy B (1024 MB) --- Lambda Invocations, ConcurrentExecutions, Duration.}
-% \end{figure}
 
 \paragraph{Vertical scaling: Heavy B @ \SI{512}{MB} vs @ \SI{1024}{MB}.}
 We re-executed the identical Heavy B shape at \SI{512}{MB} (\texttt{hBl-*}) to isolate the impact of memory. The comparison is clearest during the steady window:
@@ -306,56 +241,13 @@ We re-executed the identical Heavy B shape at \SI{512}{MB} (\texttt{hBl-*}) to i
   \item \textbf{Stability:} Both memory settings remain stable during the steady window; no persistent spikes or oscillations are evident. If any brief spikes are present, they align with RU steps and do not persist in S.
 \end{itemize}
 
-% Insert Lambda (Heavy B 512 MB)
-% \begin{figure}[h!] \centering
-%   \includegraphics[width=.32\linewidth]{figures/hBl - Invocations.png}\hfill
-%   \includegraphics[width=.32\linewidth]{figures/hBl - ConcEx.png}\hfill
-%   \includegraphics[width=.32\linewidth]{figures/hBl - Duration.png}
-%   \caption{Heavy B (512 MB) --- Lambda Invocations, ConcurrentExecutions, Duration.}
-% \end{figure}
-
-% Insert Locust vs Lambda side-by-side (optional)
-% \begin{figure}[h!] \centering
-%   \includegraphics[width=.49\linewidth]{figures/hB - Stats.png}\hfill
-%   \includegraphics[width=.49\linewidth]{figures/hBl - Stats.png}
-%   \caption{Heavy B --- Locust request statistics: 1024 MB (left) vs 512 MB (right).}
-% \end{figure}
-
 \subsection{Scenario C (Spike)}\label{subsec:resC}
 
 \paragraph{Light C (moderate spike).}
 After a short pre-spike, the user count jumps to the steady segment and then drops. Locust shows the expected RPS surge and recovery, with latency percentiles temporarily stretching at the spike boundary and then stabilizing. Lambda \emph{ConcurrentExecutions} mirrors the spike profile; \emph{Invocations} reflect the burst in requests; \emph{Duration} remains in a narrow band during the steady segment.
 
-% Insert Locust (Light C)
-% \begin{figure}[h!] \centering
-%   \includegraphics[width=\linewidth]{figures/lC - Charts.png}
-%   \caption{Light C --- Locust charts (spike).}
-% \end{figure}
-
-% Insert Lambda (Light C)
-% \begin{figure}[h!] \centering
-%   \includegraphics[width=.32\linewidth]{figures/lC - Invocations.png}\hfill
-%   \includegraphics[width=.32\linewidth]{figures/lC  - ConcEx.png}\hfill
-%   \includegraphics[width=.32\linewidth]{figures/lC  - Duration.png}
-%   \caption{Light C --- Lambda Invocations, ConcurrentExecutions, Duration.}
-% \end{figure}
-
 \paragraph{Heavy C (high-intensity spike @ \SI{1024}{MB}).}
 With near-zero think time and 10 users, the spike immediately drives the system to the concurrency limit. Locust shows a sharp RPS jump with stable percentiles in the middle of the spike; Lambda confirms the concurrency plateau and a consistent \emph{Duration} band. The swift stabilization after the spike indicates that the cold-start penalty has been amortized during WU and the system sustains the intensity without degradation.
-
-% Insert Locust (Heavy C)
-% \begin{figure}[h!] \centering
-%   \includegraphics[width=\linewidth]{figures/hC - Charts.png}
-%   \caption{Heavy C --- Locust charts (high-intensity spike).}
-% \end{figure}
-
-% Insert Lambda (Heavy C)
-% \begin{figure}[h!] \centering
-%   \includegraphics[width=.32\linewidth]{figures/hC - Invocations.png}\hfill
-%   \includegraphics[width=.32\linewidth]{figures/hC - ConcEx.png}\hfill
-%   \includegraphics[width=.32\linewidth]{figures/hC - Duration.png}
-%   \caption{Heavy C --- Lambda Invocations, ConcurrentExecutions, Duration.}
-% \end{figure}
 
 \subsection{Cross-scenario observations}
 
@@ -378,16 +270,6 @@ No sustained failures are visible in the Locust tables for the provided snapshot
   \item Under all tested shapes, the service maintains stable behavior during the Steady window, with quick recovery after spike/ramp transitions.
 \end{itemize}
 
-% -------------------------
-% Suggested figure insertions (filenames from your ZIP)
-% A (Light):  lA - Charts.png, lA - Stats.png, lA - Duration.png, lA - ConcExecutions.png, lA - Invocations.png
-% A (Heavy):  hA - Charts.png, hA- Stats.png, hA-Durations.png, hA-ConcEx.png, hA-Invocations.png
-% B (Light):  lB - Charts.png, lB - Stats.png, lB - Duration.png, lB - ConcEx.png, lB - Invocations.png
-% B (Heavy 1024MB): hB - Charts.png, hB - Stats.png, hB - Duration.png, hB - ConcEx.png, hB - Invocations.png
-% B (Heavy 512MB):  hBl - Charts.png, hBl - Stats.png, hBl - Duration.png, hBl - ConcEx.png, hBl - Invocations.png
-% C (Light):  lC - Charts.png, lC - Stats.png, lC  - Duration.png, lC  - ConcEx.png, lC - Invocations.png
-% C (Heavy):  hC - Charts.png, hC - Stats.png, hC - Duration.png, hC - ConcEx.png, hC - Invocations.png
-% -------------------------
 
 
 \section{Limitations and Future Work}
