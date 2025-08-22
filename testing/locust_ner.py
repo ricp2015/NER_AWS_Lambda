@@ -1,21 +1,33 @@
 # testing/locust_ner.py
-from locust import HttpUser, task, between, LoadTestShape, events
-import os, json, random, gevent
+from locust import HttpUser, task, LoadTestShape, events
+import os, json, random, gevent, time
 
-# -------- Config via env --------
-BASE_URL = os.environ.get("NER_API_BASE_URL")  # e.g., https://abc123.execute-api.us-east-1.amazonaws.com
+# ------------ Env knobs ------------
+BASE_URL = os.environ.get("NER_API_BASE_URL")  # e.g. https://abc123.execute-api.us-east-1.amazonaws.com
 SCENARIO = os.environ.get("SCENARIO", "B").upper()  # A, B, C, D
 
-# Warm-up knobs
-WARMUP_SECONDS     = int(os.environ.get("WARMUP_SECONDS", "60"))
-WARMUP_USERS       = int(os.environ.get("WARMUP_USERS", "2"))
-WARMUP_SPAWN_RATE  = int(os.environ.get("WARMUP_SPAWN_RATE", "2"))
-FAST_WARMUP        = os.environ.get("FAST_WARMUP", "1") in ("1", "true", "True")
+# Warm-up
+WARMUP_SECONDS    = int(os.environ.get("WARMUP_SECONDS", "60"))
+WARMUP_USERS      = int(os.environ.get("WARMUP_USERS", "2"))
+WARMUP_SPAWN_RATE = int(os.environ.get("WARMUP_SPAWN_RATE", "2"))
+FAST_WARMUP       = os.environ.get("FAST_WARMUP", "1") in ("1", "true", "True")
 
-# Global warm-up flag used by wait() to speed up WU if requested
+# Heavy mode
+HEAVY       = os.environ.get("HEAVY", "0") in ("1","true","True")
+HEAVY_USERS = int(os.environ.get("HEAVY_USERS", "10"))  # stay ≤10 in Learner Lab
+HEAVY_SPAWN = int(os.environ.get("HEAVY_SPAWN", "5"))
+HIGH_RPS = os.environ.get("HIGH_RPS", "0") in ("1","true","True")
+
+# Payload-only-long-texts mode
+LONG_TEXTS = os.environ.get("LONG_TEXTS", "0") in ("1","true","True")
+
+# Hard stop (seconds) – safety guard; 0 = disabled
+HARD_STOP_SECS = int(os.environ.get("HARD_STOP_SECS", "0"))
+
+# Warm-up flag (affects wait pacing)
 IN_WARMUP = True
 
-# -------- Payloads --------
+# ------------ Payloads ------------
 SAMPLES = [
     "Ciao, come stai oggi a Roma?",
     "Tim Cook met Elon Musk in Rome on Monday.",
@@ -32,30 +44,37 @@ SAMPLES = [
 ]
 
 def scenario_wait():
-    # Non-WU pacing per scenario
-    if SCENARIO == "A":   # Bursty (intermittent)
+    # If we want maximum throughput, shrink think time for all heavy scenarios
+    if HIGH_RPS or HEAVY:
+        # ~0–0.1s pauses → high RPS; keep D (endurance) moderate
+        if SCENARIO == "D":
+            return random.uniform(1.0, 3.0)
+        return random.uniform(0.0, 0.1)
+
+    # Non-heavy defaults (baseline profiles)
+    if SCENARIO == "A":   # Bursty users with long think-time
         return random.uniform(5.0, 10.0)
     if SCENARIO == "D":   # Endurance (low RPS)
         return random.uniform(1.0, 3.0)
     # B or C (faster)
     return random.uniform(0.2, 1.0)
 
+
 class NerUser(HttpUser):
+    # Provide Host via env var (or fill Host in UI if None)
     if BASE_URL:
         host = BASE_URL
 
-    # we override wait() to make warm-up faster when FAST_WARMUP=1
-    wait_time = between(0, 0)
-
-    def wait(self):
+    # Use a dynamic wait function (Locust calls this between tasks)
+    def wait_time(self):
         if IN_WARMUP and FAST_WARMUP:
-            self._sleep(random.uniform(0.2, 0.8))
-        else:
-            self._sleep(scenario_wait())
+            return random.uniform(0.2, 0.8)
+        return scenario_wait()
 
     @task
     def ner(self):
-        payload = {"text": random.choice(SAMPLES)}
+        texts = [t for t in SAMPLES if len(t) > 160] if LONG_TEXTS else SAMPLES
+        payload = {"text": random.choice(texts)}
         self.client.post(
             "/ner",
             headers={"Content-Type": "application/json"},
@@ -64,80 +83,74 @@ class NerUser(HttpUser):
 
 class TrafficShape(LoadTestShape):
     """
-    Staged load with a Warm-Up phase first.
-    After WARMUP_SECONDS, we reset Locust stats so final graphs exclude WU.
+    Staged load with a Warm-Up phase first (WU), then main scenario.
+    We auto-reset stats right after WU so charts/CSVs reflect only RU→S→RD.
+    Durations below are per-segment (not cumulative).
     """
     def __init__(self):
         super().__init__()
         # ----- Main scenario stages (after WU) -----
-        if SCENARIO == "A":
-            main = [(300, 5, 1)]  # 5 min @ 5 users
-# inside class TrafficShape(LoadTestShape).__init__
-        elif SCENARIO == "B":
-            # RAMP: 1→8 over ~6m (60s steps), STEADY: 6m, RAMPDOWN: 2m  => ~14m main (+ WU 60s ≈ 15m total)
+        if SCENARIO == "A":   # Bursty (intermittent)
+            main = [(300, 5, 1)]  # 5m @5
+            if HEAVY:
+                main = [(360, HEAVY_USERS, HEAVY_SPAWN)]  # ~6m @ up to 10
+        elif SCENARIO == "B": # Ramp→Steady
+            # baseline: ~12m main (ramp 6m, steady 4m, rampdown 2m)
             main = [
-                (60, 1, 1),
-                (60, 3, 2),
-                (60, 5, 2),
-                (60, 6, 2),
-                (60, 7, 2),
-                (60, 8, 3),   # ramp totals ~6m
-                (360, 8, 2),  # steady 6m
-                (60, 4, 4),
-                (60, 1, 4)    # rampdown 2m
+                (60, 1, 1), (60, 3, 2), (60, 5, 2), (60, 6, 2), (60, 7, 2), (60, 8, 3),
+                (240, 8, 2),
+                (60, 4, 4), (60, 1, 4)
             ]
-        elif SCENARIO == "C":
-            # SPIKE: quick jump to 8, hold ~4m, rampdown 1m => ~5.5m main (+ WU)
-            main = [
-                (30, 1, 2),
-                (240, 8, 8),
-                (60, 2, 6)
-            ]
+            if HEAVY:
+                # ~10m main: ramp to HEAVY, short steady, rampdown
+                main = [
+                    (60, 2, 2), (60, 5, 3), (60, 8, 3), (60, HEAVY_USERS, HEAVY_SPAWN),
+                    (240, HEAVY_USERS, HEAVY_SPAWN),
+                    (60, 4, 6), (60, 1, 6)
+                ]
+        elif SCENARIO == "C": # Spike
+            main = [(30, 1, 2), (240, 8, 8), (60, 2, 6)]  # ~5.5m
+            if HEAVY:
+                main = [(30, 2, 4), (240, HEAVY_USERS, HEAVY_SPAWN), (60, 2, 8)]
+        else:                 # D: Endurance (low RPS, long S)
+            main = [(900, 2, 1)]  # 15m
 
-        else:  # D
-            main = [(900, 2, 1)]  # 15 min low concurrency
-
-        # Prepend Warm-Up stage
+        # Prepend WU stage
         self.stages = [("WU", WARMUP_SECONDS, WARMUP_USERS, WARMUP_SPAWN_RATE)]
-        # Then tag the main stages so we know when WU ends (for stats reset timer)
-        for dur, u, r in main:
+        # Tag main stages as MAIN
+        for seg in main:
+            dur, u, r = seg
             self.stages.append(("MAIN", dur, u, r))
 
-        self.elapsed = 0
-        self.wu_done = False
+        self.run_started_at = time.time()
 
     def tick(self):
+        # Hard stop guard
+        if HARD_STOP_SECS > 0 and (self.get_run_time() >= HARD_STOP_SECS):
+            return None
+
         run_time = self.get_run_time()
-        elapsed = 0
         for label, duration, users, rate in self.stages:
             if run_time < duration:
-                # At the first tick AFTER warm-up ends, flip flag so our test_start hook can reset stats
-                if label == "MAIN" and not self.wu_done:
-                    self.wu_done = True
                 return (users, rate)
             run_time -= duration
-            elapsed += duration
-        return None  # stop test
+        return None
 
 # -------- Auto-reset stats right after warm-up --------
 @events.test_start.add_listener
 def _on_test_start(environment, **kwargs):
-    def _reset():
+    def _reset_after_wu():
         global IN_WARMUP
         gevent.sleep(WARMUP_SECONDS)
-        # Mark warm-up finished (affects wait behavior)
         IN_WARMUP = False
-
-        # Reset Locust stats so graphs/CSV exclude WU samples
         if environment.runner:
             try:
                 environment.runner.stats.reset_all()
                 environment.runner.stats.reset_all_exceptions()
             except Exception:
-                # Fallback for older/newer locust versions
                 try:
                     environment.stats.reset_all()
                 except Exception:
                     pass
         print(f"--- Locust stats reset after warm-up ({WARMUP_SECONDS}s) ---")
-    gevent.spawn(_reset)
+    gevent.spawn(_reset_after_wu)
