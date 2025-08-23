@@ -328,7 +328,7 @@ With near-zero think time and 10 users, the spike immediately drives the system 
 \subsection{Cross-scenario observations}
 
 \paragraph{Light vs Heavy.}
-Across A/B/C, Heavy runs exhibit (i) higher plateau RPS in Locust and (ii) a \emph{ConcurrentExecutions} plateau close to the account cap (9--10). Latency percentiles are generally tighter once warmed and stay within the expected budget during S. Light runs remain below saturation and are useful to show stability under realistic pacing.
+Across A/B/C, Heavy runs exhibit (i) higher plateau RPS in Locust and (ii) a \emph{ConcurrentExecutions} plateau close to the account cap (9--10). Latency percentiles are generally tighter once warmed and stay within the expected budget during S. Light runs remain below saturation.
 
 \paragraph{Cold starts and warm-up.}
 The initial minute (WU) avoids contaminating the reported Locust metrics with cold-start spikes. On Lambda graphs, any residual \emph{InitDuration}/\emph{Duration} spikes appear near the WU boundary, then disappear in the main window.
