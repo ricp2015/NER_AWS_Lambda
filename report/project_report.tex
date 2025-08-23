@@ -330,15 +330,6 @@ With near-zero think time and 10 users, the spike immediately drives the system 
 \paragraph{Light vs Heavy.}
 Across A/B/C, Heavy runs exhibit (i) higher plateau RPS in Locust and (ii) a \emph{ConcurrentExecutions} plateau close to the account cap (9--10). Latency percentiles are generally tighter once warmed and stay within the expected budget during S. Light runs remain below saturation.
 
-\paragraph{Cold starts and warm-up.}
-The initial minute (WU) avoids contaminating the reported Locust metrics with cold-start spikes. On Lambda graphs, any residual \emph{InitDuration}/\emph{Duration} spikes appear near the WU boundary, then disappear in the main window.
-
-\paragraph{Availability.}
-No sustained failures are visible in the Locust tables for the provided snapshots. On the provider side, the absence of persistent anomalies in \emph{Duration} and \emph{ConcurrentExecutions} suggests that throttling was either absent or negligible in the main windows. (If point spikes exist at RU transitions, they are short-lived and expected.) The final report will quantify availability from the exported metrics as:
-\[
-\text{Availability} \approx 1 - \frac{\sum(\text{Errors} + \text{Throttles})}{\sum(\text{Invocations})}.
-\]
-
 \subsection{Summary of findings (to be quantified with CSVs)}
 \begin{itemize}
   \item Heavy variants reach a concurrency-limited plateau with stable p95/p99 latencies; Light variants show low, steady load with minimal variance.
