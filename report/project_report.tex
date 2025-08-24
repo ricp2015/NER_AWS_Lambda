@@ -119,6 +119,8 @@ The primary objective of this study is to design and evaluate the performance ch
 
 \subsection{Named Entity Recognition (NER) and spaCy}
 NER is a NLP task focused on identifying and categorizing information elements, known as entities, within unstructured text. These entities are typically classified into predefined categories such as persons (\textsf{PERSON}), organizations (\textsf{ORG}), and geopolitical entities (\textsf{GPE}). The spaCy library in Python provides a framework for implementing NLP pipelines, offering statistical models for tasks like NER.
+The choice of NER as the target workload, rather than other AI models is motivated by its balance of practical relevance and clear performance indicators. NER is a core component of many real-world applications where extracting structured information from unstructured text is essential. Application fields include news and document analytics, compliance monitoring, biomedical literature mining, customer support automation, and conversational agents.
+
 
 \subsection{AWS SAM \& Containerized Build with Docker}
 The AWS Serverless Application Model (SAM) is an open-source framework that extends AWS CloudFormation to provide a simplified syntax for defining serverless resources. It is a form of Infrastructure as Code (IaC) specifically designed to express the functions, APIs, permissions, and events that compose a serverless application. A containerized build process involves using an isolated environment to compile application dependencies and package the code. By employing Docker, in our case, SAM ensures that the build process is executed within a containerized environment that replicates the AWS Lambda runtime. This guarantees consistency between the development build and the deployment target, thereby mitigating compatibility issues.
@@ -278,6 +280,7 @@ No sustained errors or throttles were observed in Locust or CloudWatch during th
 
 We evaluated a serverless NER API on AWS Lambda behind API Gateway using three canonical workload shapes (A: bursty, B: ramp–steady–ramp, C: spike), each in \emph{Light} and \emph{Heavy} variants, plus targeted vertical scaling experiments and an heavier stress test. An additional stress test scenario was executed with a shortened 3-minute plan.
 Within the tested limits, the architecture \emph{scales accordingly and efficiently}: throughput increases with client concurrency, latency remains controlled and predictable after warm-up, and vertical scaling via memory provides a clear performance uplift when needed. The system shows no anomalous behavior under bursty, ramped, or spiky demand, and maintains zero-failure operation at the highest tested loads (stress test).
+Future work could focus on refining both the scalability experiments and the methodology for measurement. On the experimental side, one direction could be to extend the range of load profiles beyond the canonical shapes used in this work or to explore other workload patterns. On the methodological side, we could investigate the impact of different client-side configurations on the observed behavior, such as varying think times or concurrency levels.
 
 \begin{thebibliography}{9}
 \bibitem{spacy}
