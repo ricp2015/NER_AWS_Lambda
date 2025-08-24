@@ -1,10 +1,10 @@
 # scripts/run_locust_headless.ps1
 param(
   [ValidateSet('A','B','C','D')] [string]$Scenario = 'B',
-  [string]$BaseUrl,                 # required for headless
-  [int]$Users = 8,                  # used mainly by A/D
+  [string]$BaseUrl,
+  [int]$Users = 8,
   [int]$SpawnRate = 2,
-  [string]$Duration = '6m'          # e.g., 6m, 10m
+  [string]$Duration = '6m'
 )
 
 if (-not $BaseUrl) { Write-Error "Please provide -BaseUrl (e.g., https://<api-id>.execute-api.us-east-1.amazonaws.com)"; exit 1 }

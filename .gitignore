@@ -10,4 +10,6 @@ samconfig.toml
 *.out
 *synctex.gz
 *.aux
-report/_minted-project_report/
+*.fdb_latexmk
+*.fls
+report/_minted
