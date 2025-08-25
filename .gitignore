@@ -13,3 +13,5 @@ samconfig.toml
 *.fdb_latexmk
 *.fls
 report/_minted
+*.pygstyle
+*.pygtex

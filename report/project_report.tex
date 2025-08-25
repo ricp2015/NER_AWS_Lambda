@@ -33,6 +33,16 @@
 \newcommand{\lambdahalf}[1]{\includegraphics[width=.70\linewidth]{#1}}
 
 
+\newcommand{\scenariofig}[4][\linewidth]{%
+  \begin{figure}[htbp]
+    \centering
+    \includegraphics[width=#1]{#2}
+    \caption{#3}
+    \label{#4}
+  \end{figure}%
+}
+
+
 \hypersetup{
   colorlinks=true,
   linkcolor=black,
@@ -217,10 +227,7 @@ The objective is to evaluate the responsiveness, scalability, and stability of t
 The experiments share a set of common settings. First, a Warm-up (WU) phase of \SI{60}{s} at 2 users (spawn rate 2/s) is executed in order to trigger cold starts. Immediately after the warm-up phase the client statistics are reset so that the run-up, steady, and run-down periods are isolated in the reported numbers. The payload mix consists of short and long English sentences containing named entities such as persons, organizations, locations, and dates; requests are performed via POST /ner with a small JSON body. Each scenario is executed in both a \emph{Light} and a \emph{Heavy} profile: the Light profile uses lower request rates per second (RPS) with more realistic user pacing, while the Heavy profile uses higher RPS and near-zero client think time to approach the Lambda concurrency ceiling.
 
 \subsection{Workload scenarios}
-We use three canonical workload shapes as a methodological basis to stress different operational aspects of the system under test. Durations reported below always refer to the \emph{main window} (after the warm-up and statistics reset). ``Users'' denote active virtual users, while the effective request rate (RPS) emerges from the interplay of user count, client think time, and function latency. The selection of these three shapes is motivated by the need to emulate diverse yet representative access patterns. The \emph{Bursty} scenario models sustained but intermittent interaction, suitable for capturing cold start recovery and concurrency stabilization. The \emph{Ramp--Steady--Ramp-down} scenario represents a gradual increase in load, followed by a sustained plateau and subsequent decrease, which allows evaluation of scaling dynamics. The \emph{Spike} scenario emulates sudden surges of demand, providing insights into system responsiveness under rapid load fluctuations.
-
-\subsection{Extra: Stress test scenario}
-The decision to conduct a stress test, even with the known constraint of the AWS Learner Lab's resource limits, was a calculated one aimed at challenging the boundaries of the serverless architecture. While the used account was eventually suspended for exceeding its concurrency quota (10 concurrent executions), the outcome itself was a valuable data point. Crucially, the client-side metrics collected by Locust prior to the suspension were preserved. However, CloudWatch metrics were not available after the run, due to the account's suspension. The stress test scenario was therefore executed with a shortened 3-minute window to probe headroom while staying within budget.
+We use three canonical workload shapes as a methodological basis to stress different operational aspects of the system under test, as depicted in Table 1. Durations reported below always refer to the \emph{main window} (after the warm-up and statistics reset). ``Users'' denote active virtual users, while the effective request rate (RPS) emerges from the interplay of user count, client think time, and function latency. The selection of these three shapes is motivated by the need to emulate diverse yet representative access patterns. The \emph{Bursty} scenario models sustained but intermittent interaction, suitable for capturing cold start recovery and concurrency stabilization. The \emph{Ramp--Steady--Ramp-down} scenario represents a gradual increase in load, followed by a sustained plateau and subsequent decrease, which allows evaluation of scaling dynamics. The \emph{Spike} scenario emulates sudden surges of demand, providing insights into system responsiveness under rapid load fluctuations.
 
 \begin{table}[h]
 \centering
@@ -261,17 +268,62 @@ Pre-spike \SI{30}{s} at 2 users, spike to 10 users for \SI{240}{s}, then \SI{60}
 \caption{Definition of workload scenarios (Light and Heavy profiles).}
 \end{table}
 
+\subsection{Extra: Stress test scenario}
+The decision to conduct a stress test, even with the known constraint of the AWS Learner Lab's resource limits, was a calculated one aimed at challenging the boundaries of the serverless architecture. While the used account was eventually suspended for exceeding its concurrency quota (10 concurrent executions), the outcome itself was a valuable data point. Crucially, the client-side metrics collected by Locust prior to the suspension were preserved. However, CloudWatch metrics were not available after the run, due to the account's suspension. The stress test scenario was therefore executed with a shortened 3-minute window to probe headroom while staying within budget.
+\paragraph{Test composition and outcome (\emph{Very Heavy A} “\texttt{hhA}”).}
+To probe headroom beyond the Heavy envelope, we executed a more aggressive variant of scenario~A using the settings captured in \texttt{hhA - Charts.png} and \texttt{hhA - Stats.png}. Warm-up was shortened and the active user pool enlarged to drive a higher arrival rate while keeping per-user think time minimal.
+
+\begin{table}[h]
+\centering
+\small
+\caption{Test composition for the \emph{Very Heavy A} (\texttt{hhA}) stress run.}
+\label{tab:hhA-plan}
+\begin{tabular}{llccc}
+\toprule
+Stage & Duration & Active users & Spawn behavior & Per-user think time \\
+\midrule
+Warm-up (WU) & 30\,s  & 2 & 2\,users/s (WU only) & near-zero \\
+Main window  & 180\,s & 40 (steady plateau) & rapid climb after WU & $\approx$0--0.1\,s \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\noindent\textbf{Observed outcome (Locust).}
+From the \texttt{hhA} charts/stats:
+(i) sustained throughput at $\sim$60--70\,req/s across the steady window with \emph{zero failures};
+(ii) latency stabilizes after the brief WU spike with p50 $\approx$ 0.64\,s and p95 $\approx$ 0.73\,s;
+(iii) a single max-latency outlier around $\sim$6.9\,s occurs at the transition and does not persist in steady state.
+Given the 180\,s main window, this corresponds to roughly $1.1\times 10^4$--$1.3\times 10^4$ successful requests in steady state.
+
+\begin{table}[h]
+\centering
+\small
+\caption{Summary metrics for \texttt{hhA} (from \texttt{hhA - Stats.png}/\texttt{hhA - Charts.png}).}
+\label{tab:hhA-metrics}
+\begin{tabular}{lcccccc}
+\toprule
+Window & Plateau RPS & Failures & p50 (s) & p95 (s) & Max (s) & Notes \\
+\midrule
+180\,s (steady) & $\sim$60--70 & 0 & 0.64 & 0.73 & $\sim$6.9 & single outlier at transition \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\noindent\textbf{Interpretation.}
+Despite the learner-lab concurrency ceiling and the shortened window, the client-side evidence indicates the system absorbed the higher arrival rate without degradation in the steady segment: throughput rose with load, medians remained low, and tails stayed bounded aside from the expected warm-up/transition blip. As noted above, CloudWatch provider-side series are unavailable post-run due to account suspension, so conclusions for \texttt{hhA} rest on the preserved Locust artifacts.
+
 \section{Results and discussion}
+% OK part
 The primary objective of this evaluation is to assess whether the system under study maintains its service quality under stress conditions. 
 Before examining the results, it is useful to clarify how the reported charts and metrics should be read and interpreted. The Locust charts primarily display the evolution of requests per second (RPS) together with latency percentiles (p50, p95, p99). The RPS curve reflects the effective throughput generated by the virtual users, while the percentile lines capture the distribution of response times. When both curves settle into a stable plateau, this indicates that the system has reached a steady operating state.
 Complementing these charts, the Locust request statistics provide aggregated values of latency percentiles, request counts, and possible failures, thereby allowing the tails of the latency distribution and the presence or absence of execution errors to be assessed at a glance. On the provider side, the AWS Lambda metrics add further explanatory depth. The \emph{Invocations} series tracks the cumulative number of requests served, where a linear slope corresponds to constant throughput. The \emph{ConcurrentExecutions} metric shows the number of function instances active at a given moment, thus making concurrency ceilings and the elasticity of scaling behavior visible. The \emph{Duration} series measures execution time per invocation, with narrow and stable bands signifying predictable performance and wider fluctuations revealing potential variability. 
-% Not OK part
-In interpreting the experiments, we first verify the alignment between client-side RPS and provider-side concurrency, ensuring consistency of measurement across perspectives. We then examine whether latency percentiles remain within acceptable bounds under the applied load, and finally check for anomalies such as spikes, throttling, or errors. This layered reading methodology provides a coherent framework for understanding the charts that follow.
 
+% Not OK part (replaced)
+Our reading of the experiments is two-sided and evidence-led. First, we \emph{cross-check throughput} by comparing Locust RPS with the slope of CloudWatch \emph{Invocations}; the two match in shape and level during steady windows, confirming that client-side and provider-side views are consistent. Second, we \emph{validate elasticity} by verifying that \emph{ConcurrentExecutions} rises and falls with the arrival rate (bursts, ramps, and spikes) and returns to baseline after load drops, indicating healthy scale-out/scale-in. Third, we \emph{bound latency} using Locust percentiles: p50 captures the typical user experience, while p95/p99 quantify tail behavior; brief transitions (ramp steps and spikes) are assessed separately from steady windows. Finally, we \emph{scan for stress signals}—failures in Locust, and visual cues of throttling or saturation in CloudWatch (e.g., a flat concurrency ceiling or diverging RPS vs.\ invocations). This procedure removes ambiguity between client pacing and backend capacity and ties each conclusion to a specific metric.
 
-% Not OK part
-Across all shapes, the service scales cleanly until it approaches the effective concurrency/RPS envelope of the account. Moving from Light \(\rightarrow\) Heavy increases the steady-state RPS while keeping p95/p99 latencies in a narrow, sub-second band once warm. The bursty stress test run sustains \(\sim\)60--70~RPS at p95 \(\sim\)0.73\,s with zero failures. CloudWatch confirms that \emph{ConcurrentExecutions} rises to a stable plateau commensurate with the higher arrival rate, \emph{Invocations} grow linearly during the steady window, and \emph{Duration} remains stable after WU—indicating the function is CPU/memory provisioned adequately for the tested loads.
-Repeating Heavy\,B at 512\,MB vs.\ 1024\,MB showed that higher memory (and thus CPU share) reduced p95/p99 latencies and raised sustainable RPS under identical client pacing. This is consistent with Lambda’s proportional CPU/memory model and shows that vertical scaling is an effective lever when bounded by per-invocation compute rather than by account concurrency.
+% Not OK part (replaced)
+Across all shapes, the service sustains steady throughput with low median latency and bounded tails, without recorded request failures. In the \textbf{Heavy} profile, Locust reports \(\text{RPS} \in [23.06, 30.72]\) with scenario medians p50 \(=170\text{--}180\,\mathrm{ms}\) and p95 \(=390\text{--}580\,\mathrm{ms}\) (p99 \(=840\text{--}1100\,\mathrm{ms}\)); the highest observed steady-state throughput is \(\mathbf{30.72}\,\mathrm{req/s}\) in Heavy~A (bursty). In the \textbf{Light} profile, throughput spans \(\text{RPS} \in [17.90, 22.01]\) with p50 \(=170\text{--}330\,\mathrm{ms}\), p95 \(=370\text{--}480\,\mathrm{ms}\), and p99 \(\le 500\,\mathrm{ms}\). Max latencies of \(4\text{--}5\,\mathrm{s}\) appear as rare outliers that coincide with abrupt fan-out (spikes/step-ups), a pattern consistent with cold starts rather than sustained saturation. CloudWatch corroborates these patterns: \emph{ConcurrentExecutions} traces mirror the input shapes (bursts, ramps, spikes), \emph{Invocations} grow linearly during steady windows (constant effective throughput), and \emph{Duration} bands remain tight once warm. No evidence of a hard concurrency ceiling or plateaued throughput is visible in any scenario, which supports the conclusion that the application scales elastically within the tested load envelope.
+
 % OK part
 The RU/S/RD structure in B and the transient spike in C produce brief, expected percentile spikes at transitions; the system stabilizes quickly in the steady segment with no persistent oscillations.
 No sustained errors or throttles were observed in Locust or CloudWatch during the steady windows. Availability therefore remained effectively \(> 99.9\%\) for the windows considered; brief spikes during transitions are attributed to cold-starts or step changes and do not persist.
@@ -281,6 +333,66 @@ No sustained errors or throttles were observed in Locust or CloudWatch during th
 We evaluated a serverless NER API on AWS Lambda behind API Gateway using three canonical workload shapes (A: bursty, B: ramp–steady–ramp, C: spike), each in \emph{Light} and \emph{Heavy} variants, plus targeted vertical scaling experiments and an heavier stress test. An additional stress test scenario was executed with a shortened 3-minute plan.
 Within the tested limits, the architecture \emph{scales accordingly and efficiently}: throughput increases with client concurrency, latency remains controlled and predictable after warm-up, and vertical scaling via memory provides a clear performance uplift when needed. The system shows no anomalous behavior under bursty, ramped, or spiky demand, and maintains zero-failure operation at the highest tested loads (stress test).
 Future work could focus on refining both the scalability experiments and the methodology for measurement. On the experimental side, one direction could be to extend the range of load profiles beyond the canonical shapes used in this work or to explore other workload patterns. On the methodological side, we could investigate the impact of different client-side configurations on the observed behavior, such as varying think times or concurrency levels.
+
+\scenariofig{figures/hA - Charts.png}{Heavy A — Locust RPS and latency percentiles.}{fig:ha-charts}
+\scenariofig{figures/hA - Stats.png}{Heavy A — Locust request statistics.}{fig:ha-stats}
+\scenariofig{figures/hA - Invocations.png}{Heavy A — Lambda Invocations (provider-side throughput).}{fig:ha-invocations}
+\scenariofig{figures/hA - ConcEx.png}{Heavy A — Lambda ConcurrentExecutions (elastic scale-out/in).}{fig:ha-conc}
+\scenariofig{figures/hA - Durations.png}{Heavy A — Lambda Duration per invocation.}{fig:ha-duration}
+
+% hB
+\scenariofig{figures/hB - Charts.png}{Heavy B — Locust RPS and latency percentiles.}{fig:hb-charts}
+\scenariofig{figures/hB - Stats.png}{Heavy B — Locust request statistics.}{fig:hb-stats}
+\scenariofig{figures/hB - Invocations.png}{Heavy B — Lambda Invocations (provider-side throughput).}{fig:hb-invocations}
+\scenariofig{figures/hB - ConcEx.png}{Heavy B — Lambda ConcurrentExecutions (elastic scale-out/in).}{fig:hb-conc}
+\scenariofig{figures/hB - Duration.png}{Heavy B — Lambda Duration per invocation.}{fig:hb-duration}
+
+% hBl (Heavy B, low-memory/variant)
+\scenariofig{figures/hBl - Charts.png}{Heavy B (low) — Locust RPS and latency percentiles.}{fig:hbl-charts}
+\scenariofig{figures/hBl - Stats.png}{Heavy B (low) — Locust request statistics.}{fig:hbl-stats}
+\scenariofig{figures/hBl - Invocations.png}{Heavy B (low) — Lambda Invocations.}{fig:hbl-invocations}
+\scenariofig{figures/hBl - ConcEx.png}{Heavy B (low) — Lambda ConcurrentExecutions.}{fig:hbl-conc}
+\scenariofig{figures/hBl - Duration.png}{Heavy B (low) — Lambda Duration per invocation.}{fig:hbl-duration}
+
+% hC
+\scenariofig{figures/hC - Charts.png}{Heavy C — Locust RPS and latency percentiles.}{fig:hc-charts}
+\scenariofig{figures/hC - Stats.png}{Heavy C — Locust request statistics.}{fig:hc-stats}
+\scenariofig{figures/hC - Invocations.png}{Heavy C — Lambda Invocations.}{fig:hc-invocations}
+\scenariofig{figures/hC - ConcEx.png}{Heavy C — Lambda ConcurrentExecutions.}{fig:hc-conc}
+\scenariofig{figures/hC - Duration.png}{Heavy C — Lambda Duration per invocation.}{fig:hc-duration}
+
+% =========================
+% Insert these two figures INSIDE your existing
+% \subsection{Extra: Stress test scenario} — right after the paragraph you provided
+% =========================
+\scenariofig{figures/hhA - Charts.png}{Very Heavy A (stress) — Locust RPS and latency percentiles.}{fig:hha-charts}
+\scenariofig{figures/hhA - Stats.png}{Very Heavy A (stress) — Locust request statistics.}{fig:hha-stats}
+
+% =========================
+% Insert AFTER the stress-test subsection
+% =========================
+
+% ---- LIGHT scenarios (A, B, C) ----
+% lA (note the filename 'ConcExecutions.png')
+\scenariofig{figures/lA - Charts.png}{Light A — Locust RPS and latency percentiles.}{fig:la-charts}
+\scenariofig{figures/lA - Stats.png}{Light A — Locust request statistics.}{fig:la-stats}
+\scenariofig{figures/lA - Invocations.png}{Light A — Lambda Invocations.}{fig:la-invocations}
+\scenariofig{figures/lA - ConcExecutions.png}{Light A — Lambda ConcurrentExecutions.}{fig:la-conc}
+\scenariofig{figures/lA - Duration.png}{Light A — Lambda Duration per invocation.}{fig:la-duration}
+
+% lB
+\scenariofig{figures/lB - Charts.png}{Light B — Locust RPS and latency percentiles.}{fig:lb-charts}
+\scenariofig{figures/lB - Stats.png}{Light B — Locust request statistics.}{fig:lb-stats}
+\scenariofig{figures/lB - Invocations.png}{Light B — Lambda Invocations.}{fig:lb-invocations}
+\scenariofig{figures/lB - ConcEx.png}{Light B — Lambda ConcurrentExecutions.}{fig:lb-conc}
+\scenariofig{figures/lB - Duration.png}{Light B — Lambda Duration per invocation.}{fig:lb-duration}
+
+% lC
+\scenariofig{figures/lC - Charts.png}{Light C — Locust RPS and latency percentiles.}{fig:lc-charts}
+\scenariofig{figures/lC - Stats.png}{Light C — Locust request statistics.}{fig:lc-stats}
+\scenariofig{figures/lC - Invocations.png}{Light C — Lambda Invocations.}{fig:lc-invocations}
+\scenariofig{figures/lC - ConcEx.png}{Light C — Lambda ConcurrentExecutions.}{fig:lc-conc}
+\scenariofig{figures/lC - Duration.png}{Light C — Lambda Duration per invocation.}{fig:lc-duration}
 
 \begin{thebibliography}{9}
 \bibitem{spacy}
