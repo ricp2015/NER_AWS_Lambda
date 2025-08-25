@@ -1,7 +1,6 @@
 from typing import List, Dict
 import spacy
 
-# Load once at import: fast warm calls in Lambda + fast local tests
 NLP = spacy.load("en_core_web_sm")
 
 def extract_entities(text: str) -> List[Dict]:

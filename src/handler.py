@@ -15,7 +15,6 @@ def _parse_body(event: Dict[str, Any]) -> Dict[str, Any]:
             return json.loads(body)
         except json.JSONDecodeError:
             return {}
-    # Allow direct call: event itself is the body
     return event if isinstance(event, dict) else {}
 
 def lambda_handler(event, context) -> Dict[str, Any]:

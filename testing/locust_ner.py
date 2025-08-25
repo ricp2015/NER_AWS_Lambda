@@ -2,9 +2,8 @@
 from locust import HttpUser, task, LoadTestShape, events
 import os, json, random, gevent, time
 
-# ------------ Env knobs ------------
 BASE_URL = os.environ.get("NER_API_BASE_URL")  # e.g. https://abc123.execute-api.us-east-1.amazonaws.com
-SCENARIO = os.environ.get("SCENARIO", "B").upper()  # A, B, C, D
+SCENARIO = os.environ.get("SCENARIO", "B").upper()
 
 # Warm-up
 WARMUP_SECONDS    = int(os.environ.get("WARMUP_SECONDS", "60"))
@@ -14,7 +13,7 @@ FAST_WARMUP       = os.environ.get("FAST_WARMUP", "1") in ("1", "true", "True")
 
 # Heavy mode
 HEAVY       = os.environ.get("HEAVY", "0") in ("1","true","True")
-HEAVY_USERS = int(os.environ.get("HEAVY_USERS", "10"))  # stay ≤10 in Learner Lab
+HEAVY_USERS = int(os.environ.get("HEAVY_USERS", "10")) 
 HEAVY_SPAWN = int(os.environ.get("HEAVY_SPAWN", "5"))
 HIGH_RPS = os.environ.get("HIGH_RPS", "0") in ("1","true","True")
 
@@ -43,9 +42,8 @@ SAMPLES = [
 ]
 
 def scenario_wait():
-    # If we want maximum throughput, shrink think time for all heavy scenarios
     if HIGH_RPS or HEAVY:
-        # ~0–0.1s pauses → high RPS; keep D (endurance) moderate
+        # ~0–0.1s pauses → high RPS;
         if SCENARIO == "D":
             return random.uniform(1.0, 3.0)
         return random.uniform(0.0, 0.1)
@@ -60,11 +58,9 @@ def scenario_wait():
 
 
 class NerUser(HttpUser):
-    # Provide Host via env var (or fill Host in UI if None)
     if BASE_URL:
         host = BASE_URL
 
-    # Use a dynamic wait function (Locust calls this between tasks)
     def wait_time(self):
         if IN_WARMUP and FAST_WARMUP:
             return random.uniform(0.2, 0.8)
@@ -88,7 +84,6 @@ class TrafficShape(LoadTestShape):
     """
     def __init__(self):
         super().__init__()
-        # ----- Main scenario stages (after WU) -----
         if SCENARIO == "A":   # Bursty (intermittent)
             main = [(300, 5, 1)]  # 5m @5
             if HEAVY:
@@ -135,7 +130,6 @@ class TrafficShape(LoadTestShape):
             run_time -= duration
         return None
 
-# -------- Auto-reset stats right after warm-up --------
 @events.test_start.add_listener
 def _on_test_start(environment, **kwargs):
     def _reset_after_wu():
