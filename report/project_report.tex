@@ -102,38 +102,14 @@ Observability is a system property that describes how well internal states can b
 \subsection{Load Testing with Locust}
 Locust is an open-source load testing tool that allows developers to define user behavior with Python code and simulate various concurrent users to assess a system's performance under stress. Its distributed and scalable nature makes it suitable for testing the limits of web services and APIs. It provides a real-time web-based user interface to visualize performance indicators such as requests per second, response times, and the number of failing requests as the test is running.
 
-\section{System Design and Implementation}
-\begin{figure}[h]
-\centering
-\begin{tikzpicture}[
-    node distance=2cm,
-    every node/.style={align=center, font=\small},
-    box/.style={rectangle, draw, rounded corners, minimum width=3cm, minimum height=1cm, fill=gray!10},
-    arrow/.style={-Latex, thick}
-]
+\section{System Design and API}
 
-% Nodes
-\node[box] (user) {User \\ (Browser)};
-\node[box, right=of user] (frontend) {Front-End \\ (Static HTML + JS)};
-\node[box, right=of frontend] (apigw) {AWS API Gateway};
-\node[box, below=of apigw] (lambda) {AWS Lambda \\ (NER with spaCy)};
-\node[box, left=of lambda] (response) {JSON Response};
-
-% Arrows
-\draw[arrow] (user) -- (frontend) node[midway, above] {input text};
-\draw[arrow] (frontend) -- (apigw) node[midway, above] {HTTP POST};
-\draw[arrow] (apigw) -- (lambda) node[midway, right] {invoke};
-\draw[arrow] (lambda) -- (apigw) node[midway, right] {output};
-\draw[arrow] (apigw) -- (frontend);
-\draw[arrow] (frontend) -- (user) node[midway, below] {display entities};
-
-% Optional response box
-\draw[arrow, dashed] (lambda.west) -- (response.east);
-
-\end{tikzpicture}
-\caption{System architecture of the NER Lambda application.}
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{figures/architecture_diagram.png}
+    \caption{System architecture of the NER Lambda application.}
+    \label{fig:architecture}
 \end{figure}
-
 
 \noindent\textbf{API contract.}
 \begin{minted}[
@@ -251,7 +227,7 @@ Complementing these charts, the Locust request statistics provide aggregated val
 Our reading of the experiments is two-sided and evidence-led. First, we cross-check throughput by comparing Locust RPS with the slope of CloudWatch \emph{Invocations}; the two match in shape and level during steady windows, confirming that client-side and provider-side views are consistent. Second, we validate elasticity by verifying that \emph{ConcurrentExecutions} rises and falls with the arrival rate (bursts, ramps, and spikes) and returns to baseline after load drops, indicating healthy scale-out/scale-in. Finally, we scan for stress signals: failures in Locust, and visual cues of throttling or saturation in CloudWatch (e.g., a flat concurrency ceiling or diverging RPS vs.\ invocations).
 Across all shapes, the service sustains steady throughput with low median latency and bounded tails, without recorded request failures. In the heavy profile, Locust reports \(\text{RPS} \in [23.06, 30.72]\) with scenario medians p50 \(=170\text{--}180\,\mathrm{ms}\) and p95 \(=390\text{--}580\,\mathrm{ms}\); the highest observed steady-state throughput is 30.72 req/s in Heavy~A (bursty). In the light profile, throughput spans \(\text{RPS} \in [17.90, 22.01]\) with p50 \(=170\text{--}330\,\mathrm{ms}\), p95 \(=370\text{--}480\,\mathrm{ms}\). Max latencies of \(4\text{--}5\,\mathrm{s}\) appear as rare outliers that coincide with abrupt fan-out (spikes/step-ups), a pattern consistent with cold starts rather than sustained saturation. CloudWatch corroborates these patterns: \emph{ConcurrentExecutions} traces mirror the input shapes (bursts, ramps, spikes), \emph{Invocations} grow linearly during steady windows (constant effective throughput), and \emph{Duration} bands remain tight once warm. No evidence of a hard concurrency ceiling or plateaued throughput is visible in any scenario, which supports the conclusion that the application scales elastically within the tested load envelope.
 The RU/S/RD structure in B and the transient spike in C produce brief, expected percentile spikes at transitions; the system stabilizes quickly in the steady segment with no persistent oscillations.
-No sustained errors or throttles were observed in Locust or CloudWatch during the steady windows. Availability therefore remained effectively \(> 99.9\%\) for the windows considered; brief spikes during transitions are attributed to cold-starts or step changes and do not persist.
+Comparing Heavy B at \SI{1024}{MB} with its \SI{512}{MB} counterpart, the larger memory setting exhibits smaller response-time spikes and tighter latency bands. No sustained errors or throttles were observed in Locust or CloudWatch during the steady windows. Availability therefore remained effectively \(> 99.9\%\) for the windows considered; brief spikes during transitions are attributed to cold-starts or step changes and do not persist.
 
 \section{Conclusion}\label{sec:conclusion}
 
