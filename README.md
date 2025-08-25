@@ -88,3 +88,5 @@ docker build -t ner-frontend .
 docker run -d -p 8080:80 ner-frontend
 
 Then open http://localhost:8080 in your browser.
+
+To run automated tests, execute locust_ner.py, tweaking its macros as needed.
