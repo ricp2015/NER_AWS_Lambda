@@ -81,7 +81,7 @@
 \section{Introduction}
 This work explores the application of a production-ready NLP pipeline for Named Entity Recognition (NER) on AWS Lambda. By leveraging AWS Lambda and Amazon API Gateway, we architect a microservice that is inherently scalable. The implementation utilizes the spaCy library, whilst the entire application stack (including compute, API management, and security) is defined and deployed using the AWS Serverless Application Model (SAM).
 
-The primary objective of this study is to design and evaluate the performance characteristics of this service under varied load conditions. We employ Locust, an open-source load-testing tool, to simulate traffic patterns. The findings confirm the viability of serverless architectures for deploying microservices.
+The primary objective of this study is to design and evaluate the performance characteristics of this service under varied load conditions. We employ Locust, an open-source load-testing tool, to simulate traffic patterns. The findings confirm the viability of this serverless architecture.
 
 \section{Background}
 
@@ -106,12 +106,11 @@ Locust is an open-source load testing tool that allows developers to define user
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.8\textwidth]{figures/architecture_diagram.png}
+    \includegraphics[width=0.8\textwidth]{figures/architecture_diagram.jpeg}
     \caption{System architecture of the NER Lambda application.}
     \label{fig:architecture}
 \end{figure}
 
-\noindent\textbf{API contract.}
 \begin{minted}[
     frame=single,
     linenos
